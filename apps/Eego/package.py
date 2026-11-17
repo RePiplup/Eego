@@ -97,7 +97,8 @@ def package(build, qt, mingw, output):
         files = sorted(p for p in stage.rglob("*") if p.is_file())
         hashes = {p.relative_to(stage).as_posix(): digest(p) for p in files}
         manifest = stage/"manifest.json"
-        manifest.write_text(json.dumps(dict(entry="HandmadeBTQuick.exe", files=hashes), indent=2), encoding="utf8")
+        version = (build / "ui/release-version.txt").read_text().strip()
+        manifest.write_text(json.dumps(dict(version=version, entry="HandmadeBTQuick.exe", files=hashes), indent=2), encoding="utf8")
         draft = Path(temp)/"package.zip"
         with zipfile.ZipFile(draft, "x", zipfile.ZIP_DEFLATED, compresslevel=1) as bundle:
             for path in [*files, manifest]:

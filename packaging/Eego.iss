@@ -29,3 +29,12 @@ Source: "{#Payload}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cr
 [Icons]
 Name: "{userprograms}\Eego\Eego"; Filename: "{app}\HandmadeBTQuick.exe"; WorkingDir: "{app}"
 Name: "{userprograms}\Eego\Browser Setup"; Filename: "{app}\Browser-Setup.cmd"; WorkingDir: "{app}"
+
+[Run]
+Filename: "{app}\HandmadeBTQuick.exe"; WorkingDir: "{app}"; Flags: nowait; Check: IsEegoUpdate
+
+[Code]
+function IsEegoUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:EEGOUPDATE|0}') = '1';
+end;

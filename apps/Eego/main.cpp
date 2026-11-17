@@ -302,6 +302,8 @@ private:
 };
 
 #ifndef EEGO_SERVICE_TEST
+#include "updater.hpp"
+#include <QNetworkProxyFactory>
 class UiText final : public QTranslator {
     QJsonObject labels;
 public:
@@ -318,6 +320,7 @@ public:
 
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
+    app.setApplicationVersion(EEGO_VERSION);
     UiText text;
     app.installTranslator(&text);
     app.setWindowIcon(QIcon(":/qt/qml/HandmadeBT/assets/eego.ico"));
@@ -372,7 +375,12 @@ int main(int argc, char **argv) {
         try{text=QString::fromStdWString(browser_bridge::normalize(text.toStdWString()));}catch(...){return 0;}
         return service.external(text,false,filename);
     };
+    QNetworkProxyFactory::setUseSystemConfiguration(true);
+    QNetworkAccessManager updateNetwork;
+    Updater updater(updateNetwork);
     QQmlApplicationEngine engine;
+    QObject::connect(&updater, &Updater::installationReady, &service, &DownloadService::shutdown);
+    engine.rootContext()->setContextProperty("appUpdater",&updater);
     engine.rootContext()->setContextProperty("downloadService",&service);
     engine.loadFromModule("HandmadeBT","Main");
     if (engine.rootObjects().isEmpty()) return 1;
@@ -401,7 +409,12 @@ int main(int argc, char **argv) {
     if(!bridge)return 3;
     if(!openInput.isEmpty())service.importTorrent(openInput);
     ReleaseMutex(gate.h);gate.held=false;
-    return app.exec();
+    if (!options.isSet("data-dir")) QTimer::singleShot(1500, &updater, [&updater]{ updater.check(false); });
+    const int result = app.exec();
+    if (!updater.launchInstaller()) {
+        QMessageBox::warning(nullptr,QObject::tr("更新未启动"),QObject::tr("Windows 无法启动安装程序，请重新打开 Eego 后重试。"));
+    }
+    return result;
 }
 #else
 #ifdef EEGO_TASK_UI_TEST

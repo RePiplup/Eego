@@ -32,8 +32,12 @@ UI 源码采用 GPL-2.0-or-later。发布时保留原核心、aria2 派生代码
 
 参考 [Qt 官方开源安装入口](https://www.qt.io/development/download-qt-installer-oss) 和 [Qt 对 GPL/LGPL 义务的说明](https://www.qt.io/development/open-source-lgpl-obligations)。
 
+## 修改正式版界面
+
+布局、样式和交互在 `apps/Eego/Main.qml`，界面文案在 `apps/Eego/ui-text.json`，图标和图片在 `apps/Eego/assets/`。QML 和图片编译进桌面程序，文案表在打包时从源码复制。请修改这些源文件，再重新构建和安装。
+
 ## 发布 Windows 安装包
 
-准备好构建依赖后运行 `./apps/Eego/build.ps1`，再运行 `./tools/build-installer.ps1 -Version 0.10.0`（后续替换为新版本号，需 Inno Setup 6）。测试首次安装和覆盖升级，提交源码并推送，为该提交创建并推送同名版本标签（例如 `v0.10.0`）。在 GitHub Release 附上 `dist` 下对应版本的安装程序、`.sha256` 和更新说明。
+先更新 `apps/Eego/CMakeLists.txt` 的项目版本号，准备好构建依赖后运行 `./apps/Eego/build.ps1`，再运行 `./tools/build-installer.ps1 -Version 0.10.1`（后续替换为新版本号，需 Inno Setup 6）。测试首次安装和覆盖升级，提交源码并推送，为该提交创建并推送同名版本标签（例如 `v0.10.1`）。在 GitHub Release 附上 `dist` 下对应版本的安装程序、`.sha256` 和更新说明。
 
-发布前可先在 GitHub 将该版本设为 **Pre-release**，然后在 **Actions → Check Windows installer → Run workflow** 输入标签。工作流会下载附件、核对 SHA-256，在独立 Windows 环境安装并打开软件，创建测试任务，覆盖安装同一版本，再检查任务、下载文件和浏览器主机注册。通过后，在 Release 编辑页取消 **Pre-release**，设为最新正式版。
+发布前可先在 GitHub 将该版本设为 **Pre-release**，然后在 **Actions → Check Windows installer → Run workflow** 输入标签。工作流会下载附件、核对 SHA-256，在独立 Windows 环境安装并打开软件，创建测试任务，覆盖安装目标版本（可通过 previous_tag 指定旧版本），再检查任务、下载文件和浏览器主机注册。通过后，在 Release 编辑页取消 **Pre-release**，设为最新正式版。

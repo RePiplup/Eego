@@ -6,6 +6,10 @@ on:
         description: Published release or prerelease tag to test
         required: true
         type: string
+      previous_tag:
+        description: Optional installed version to upgrade from
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -20,23 +24,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
+          PREVIOUS_TAG: ${{ inputs.previous_tag }}
         run: |
           if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Invalid version tag' }
           gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-setup.exe*'
           if ($LASTEXITCODE) { throw 'Release download failed' }
           $installer = Get-Item "Eego-$($env:RELEASE_TAG.Substring(1))-windows-x64-setup.exe"
           if ((Get-FileHash $installer).Hash -ne ((Get-Content "$installer.sha256") -split '\s+')[0]) { throw 'Installer checksum mismatch' }
+          if ($env:PREVIOUS_TAG) {
+            if ($env:PREVIOUS_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Invalid previous version' }
+            gh release download $env:PREVIOUS_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-setup.exe*' --dir previous
+            if ($LASTEXITCODE) { throw 'Previous release download failed' }
+            $old = Get-Item "previous/Eego-$($env:PREVIOUS_TAG.Substring(1))-windows-x64-setup.exe"
+            if ((Get-FileHash $old).Hash -ne ((Get-Content "$old.sha256") -split '\s+')[0]) { throw 'Previous installer checksum mismatch' }
+          }
       - name: Install, open Eego, create a task and check an in-place update
         shell: pwsh
         run: |
           $installer = (Get-Item *-setup.exe).FullName
           $app = Join-Path $env:LOCALAPPDATA 'Programs/Eego'
           if (Test-Path $app) { throw 'Expected a fresh Windows profile' }
-          function Install-Eego {
-            $proc = Start-Process $installer -ArgumentList '/VERYSILENT','/NORESTART','/SUPPRESSMSGBOXES' -PassThru -Wait
+          function Install-Eego($package) {
+            $proc = Start-Process $package -ArgumentList '/VERYSILENT','/NORESTART','/SUPPRESSMSGBOXES' -PassThru -Wait
             if ($proc.ExitCode) { throw "Installer returned $($proc.ExitCode)" }
           }
-          Install-Eego
+          if (Test-Path previous) { Install-Eego (Get-Item previous/*-setup.exe).FullName } else { Install-Eego $installer }
           $env:Path = "$env:SystemRoot\system32;$env:SystemRoot"
           $library = Join-Path $app 'userdata'
           $service = Join-Path $app 'core/task_service_host_r3.exe'
@@ -61,7 +73,7 @@ jobs:
           Set-Content "$downloads/upgrade-fixture.bin" 'preserve this file'
           & "$app/Browser-Setup.cmd"
           if ($LASTEXITCODE) { throw 'Browser setup failed' }
-          Install-Eego
+          Install-Eego $installer
           if ((Get-FileHash "$library/tasks.record").Hash -ne $record.Hash) { throw 'Task record changed during install' }
           if ((Get-Content "$downloads/upgrade-fixture.bin") -ne 'preserve this file') { throw 'Download changed' }
           $listed = @('{"op":"list","requestId":"check"}', $stop) | & $service --data-dir $library
@@ -69,4 +81,15 @@ jobs:
           foreach ($browser in 'Microsoft/Edge','Google/Chrome') {
             $key = Get-Item "HKCU:/Software/$browser/NativeMessagingHosts/org.handmadebt.bridge"
             if ($key.GetValue('') -ne "$app\browser\native-host.json") { throw 'Browser registration changed' }
+          }
+          if ((Get-Content "$app/manifest.json" -Raw | ConvertFrom-Json).version) {
+            $proc = Start-Process $installer -ArgumentList '/VERYSILENT','/NORESTART','/EEGOUPDATE=1',"/DIR=`"$app`"" -PassThru
+            if (!$proc.WaitForExit(120000) -or $proc.ExitCode) { throw 'Update installer failed' }
+            $expectedTitle = (Get-Content "$app/ui-text.json" -Raw | ConvertFrom-Json).'鹅鹅下载 · 统一版'
+            $limit = [datetime]::UtcNow.AddSeconds(40)
+            do {
+              $opened = Get-Process HandmadeBTQuick -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq "$app\HandmadeBTQuick.exe" -and $_.MainWindowTitle -eq $expectedTitle }
+              if (!$opened) { Start-Sleep -Milliseconds 300 }
+            } until ($opened -or [datetime]::UtcNow -ge $limit)
+            if (!$opened) { throw 'Updated UI did not relaunch with the packaged window title' }
           }

@@ -22,6 +22,7 @@ try {
     $payload = Join-Path $stage 'Eego'
     $manifest = Get-Content -Raw -LiteralPath "$payload/manifest.json" | ConvertFrom-Json
     $entries = $manifest.files.PSObject.Properties
+    if ($manifest.version -ne $Version) { throw "Package version '$($manifest.version)' does not match $Version" }
     foreach ($file in $entries) {
         if ((Get-FileHash -LiteralPath (Join-Path $payload $file.Name)).Hash -ne $file.Value) {
             throw "Payload checksum mismatch for $($file.Name)"

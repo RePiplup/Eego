@@ -419,6 +419,10 @@ ApplicationWindow {
   id:settings;title:qsTr("设置");width:Math.min(520,win.width-48)
   contentItem:ColumnLayout{
    spacing:8
+   RowLayout{
+    Label{text:"Eego "+Qt.application.version;color:win.muted}
+    Action{text:qsTr("检查更新");onClicked:appUpdater.check(true)}
+   }
    Label{text:qsTr("最多同时下载任务");font.bold:true;color:win.ink}
    RowLayout{
     ComboBox{id:concurrencyChoice;objectName:"concurrencyChoice";Accessible.name:qsTr("最多同时下载任务");model:Array.from({length:8},(_,i)=>String(i+1));currentIndex:downloadService.maxActiveTasks-1;enabled:downloadService.available&&!downloadService.settingsPending
