@@ -19,7 +19,7 @@ DisableDirPage=auto
 OutputBaseFilename=Eego-{#ReleaseVersion}-windows-x64-setup
 SetupIconFile=..\apps\Eego\assets\eego.ico
 UninstallDisplayIcon={app}\HandmadeBTQuick.exe
-Compression=zip/fast
+Compression=lzma2/fast
 WizardStyle=modern
 RestartApplications=no
 
