@@ -21,6 +21,8 @@ jobs:
           FROM_TAG: ${{ inputs.from_tag }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $env:QT_ACCESSIBILITY = '1'
           if ($env:FROM_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Invalid source tag' }
           $base = "https://github.com/$env:GITHUB_REPOSITORY/releases"
           Invoke-WebRequest -UseBasicParsing "$base/latest/download/eego-update.json" -OutFile update.json
@@ -35,19 +37,49 @@ jobs:
           $setup = Start-Process ".\$name" -ArgumentList '/VERYSILENT','/NORESTART' -PassThru -Wait
           if ($setup.ExitCode) { throw 'Initial installation failed' }
           $dir = Join-Path $env:LOCALAPPDATA 'Programs\Eego'
-          $old = Start-Process "$dir\HandmadeBTQuick.exe" -WorkingDirectory $dir -PassThru
+          $old = Start-Process "$dir\HandmadeBTQuick.exe" -WorkingDirectory $dir -PassThru -RedirectStandardError "$env:RUNNER_TEMP/eego-stderr.txt"
           Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes
-          $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          using System.Text;
+          public class EegoWindows {
+            public delegate bool Callback(IntPtr handle, IntPtr unused);
+            [DllImport("user32.dll")] static extern bool EnumWindows(Callback callback, IntPtr unused);
+            [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr handle, out uint pid);
+            [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr handle, StringBuilder text, int length);
+            [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr handle, uint msg, IntPtr key, IntPtr flags);
+            public static IntPtr Find(int pid, string title) {
+              IntPtr found=IntPtr.Zero;
+              EnumWindows((h,u) => {
+                uint owner; GetWindowThreadProcessId(h,out owner);
+                if (owner!=pid) return true;
+                var text=new StringBuilder(256); GetWindowText(h,text,256);
+                if (text.ToString()!=title) return true;
+                found=h; return false;
+              },IntPtr.Zero);
+              return found;
+            }
+          }
+          '@
           $condition = New-Object System.Windows.Automation.PropertyCondition(
             [System.Windows.Automation.AutomationElement]::NameProperty, '下载并安装')
           $deadline = [datetime]::UtcNow.AddSeconds(90)
           do {
-            $buttons = $desktop.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
-            $button = $buttons | Where-Object { $_.Current.ProcessId -eq $old.Id } | Select-Object -First 1
-            if (!$button) { Start-Sleep -Milliseconds 500 }
-          } until ($button -or [datetime]::UtcNow -gt $deadline)
-          if (!$button) { throw 'The running application did not offer the latest version' }
-          $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+            $dialog = [EegoWindows]::Find($old.Id, '发现新版本')
+            if ($dialog -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 500 }
+          } until ($dialog -ne [IntPtr]::Zero -or [datetime]::UtcNow -gt $deadline)
+          if ($dialog -eq [IntPtr]::Zero) {
+            Get-Content "$env:RUNNER_TEMP/eego-stderr.txt"
+            throw 'The running application did not offer the latest version'
+          }
+          $element = [System.Windows.Automation.AutomationElement]::FromHandle($dialog)
+          $button = $element.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+          if ($button) { $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke() }
+          else {
+            [void][EegoWindows]::PostMessage($dialog, 0x100, [IntPtr]13, [IntPtr]0)
+            [void][EegoWindows]::PostMessage($dialog, 0x101, [IntPtr]13, [IntPtr]0)
+          }
           if (!$old.WaitForExit(300000)) { throw 'The updater did not shut the old app down' }
           $deadline = [datetime]::UtcNow.AddSeconds(120)
           do {
