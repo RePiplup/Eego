@@ -31,3 +31,9 @@
 UI 源码采用 GPL-2.0-or-later。发布时保留原核心、aria2 派生代码及其他原组件的许可证和源码义务。Qt 的商业授权不会改变这些义务。采用 Qt 开源组件时应按实际选入的各模块及第三方依赖附带许可证和版权通知；对于 LGPLv3 库，应提供该构建对应的完整源码或符合条件的书面提供方式，并说明替换共享库和重新构建、链接、运行程序的步骤。保留 DLL 和模块目录结构，允许以兼容版本替换，不施加签名锁定。
 
 参考 [Qt 官方开源安装入口](https://www.qt.io/development/download-qt-installer-oss) 和 [Qt 对 GPL/LGPL 义务的说明](https://www.qt.io/development/open-source-lgpl-obligations)。
+
+## 发布 Windows 安装包
+
+准备好构建依赖后运行 `./apps/Eego/build.ps1`，再运行 `./tools/build-installer.ps1 -Version 0.10.0`（后续替换为新版本号，需 Inno Setup 6）。测试首次安装和覆盖升级，提交源码并推送，为该提交创建并推送同名版本标签（例如 `v0.10.0`）。在 GitHub Release 附上 `dist` 下对应版本的安装程序、`.sha256` 和更新说明。
+
+发布前可先在 GitHub 将该版本设为 **Pre-release**，然后在 **Actions → Check Windows installer → Run workflow** 输入标签。工作流会下载附件、核对 SHA-256，在独立 Windows 环境安装并打开软件，创建测试任务，覆盖安装同一版本，再检查任务、下载文件和浏览器主机注册。通过后，在 Release 编辑页取消 **Pre-release**，设为最新正式版。
