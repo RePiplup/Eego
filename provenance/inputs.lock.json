@@ -1,0 +1,33 @@
+{
+  "aria2": "9e7273583f83e881e3ec067b523ba88724088d2f",
+  "libtorrent": "eb397173da6189dad52f008916c27419dde32faa",
+  "try_signal": "105cce59972f925a33aa6b1c3109e4cd3caf583d",
+  "comparison_only_2_1": "87b553a1813bb23f77311d0063461b731ba35bdb",
+  "python": "3.12.7",
+  "artifacts": [
+    {
+      "name": "llvm-mingw",
+      "path": "tools/llvm-mingw.zip",
+      "url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20261020/llvm-mingw-20261020-ucrt-x86_64.zip",
+      "sha256": "fd5462b7f5d93b2ff981fcd3f9c7e427e47f3203c64ea91c27bcc444eebd74cd"
+    },
+    {
+      "name": "boost",
+      "path": "tools/downloads/boost_1_82_0.tar.bz2",
+      "url": "https://archives.boost.io/release/1.82.0/source/boost_1_82_0.tar.bz2",
+      "sha256": "a6e1ab9b0860e6a2881dd7b21fe9f737a095e5f33a3a874afc6a345228597ee6"
+    },
+    {
+      "name": "cmake",
+      "path": "tools/downloads/cmake-3.31.6-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/18/58/909d6d99acb4e0886d0f660cf4e0fb26f586590e370b2e4ce7a10d06b145/cmake-3.31.6-py3-none-win_amd64.whl",
+      "sha256": "bbaed969cef3c427f4f17591feb28db4ae595e3a4bbd45cb35522cee14df6a32"
+    },
+    {
+      "name": "ninja",
+      "path": "tools/downloads/ninja-1.11.1.3-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/03/93/09a9f7672b4f97438aca6217ac54212a63273f1cd3b46b731d0bb22c53e7/ninja-1.11.1.3-py3-none-win_amd64.whl",
+      "sha256": "04d48d14ea7ba11951c156599ab526bdda575450797ff57c6fdf99b2554d09c7"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "HandmadeBT 下载助手",
+  "version": "0.9.7",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoNwk8VoJrZdAdi4Ji5K7Y1fDFVGQ4JNCnpmk1MmTjuYrIq6MLdyzrGaqXlLZG0LAKXe4/kZq3ZLsM2i5gPbcIiYctj/dON6DAh+Wj6CY7hN2dDTQP81OCk5PlFAVhQ66m7FJ5vnchXNCCq8Sf0J2X1HiIelGRCT89kQw2DxlBdsQ7khtE2UHgkz9XY6dhttdiE8L7BSRnajqfZfYoOsT8y1/ViawZrwFuGQvLWaMvWqJJgs7SInt+Mn6x3/5R0JVsif0eklj7MW1ZG15gLJIVxLKlUJeM5ZWZ2LiKxUAAD7jzJsAD4Ks5C/jWK350w+wyxEIpDrLOt1Rvcz/j+qnAQIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "contextMenus",
+    "downloads",
+    "storage",
+    "alarms"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "optional_permissions": [
+    "cookies"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "description": "将浏览器下载链接交给 HandmadeBT 桌面客户端。"
+}

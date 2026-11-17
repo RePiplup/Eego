@@ -1,0 +1,7 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>HandmadeBT</title>
+<style>body{font:14px system-ui;width:330px;padding:12px}textarea{width:100%;box-sizing:border-box;height:80px}button{margin:10px 0;padding:8px}p{line-height:1.5}#result{overflow-wrap:anywhere}</style>
+<h3>交给 HandmadeBT 下载</h3><textarea id="url" placeholder="粘贴 HTTP / HTTPS / Magnet 链接"></textarea><button id="send">打开 HandmadeBT 并添加</button>
+<p><label><input type="checkbox" id="capture">尝试接管下载（失败时保留浏览器下载）</label></p>
+<p>也可右键网页链接 → 使用 HandmadeBT 下载链接。首次使用请运行安装包里的 Browser-Setup.cmd。</p>
+<p>自动接管时先暂停浏览器下载，下载器确认接收后停止浏览器下载；交接失败则恢复浏览器下载。接管后的进度和错误请查看 HandmadeBT。</p>
+<section id="authorization" hidden><p id="sessionSite"></p><p>此次下载被拒绝或转到了登录页。如果你已在原网站登录，可授权下载器使用该网站的登录状态后重试。</p><button id="authorize">授权此网站</button> <button id="dismissAuth">暂不授权</button><p>仅将适用于下载地址的 Cookie 临时传给本机下载器，不写入任务记录，不跨网站发送。授权不等于登录；POST 表单及分区 Cookie 暂不支持。</p></section><p id="result"></p><script src="popup.js"></script></html>

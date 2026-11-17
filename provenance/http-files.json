@@ -1,0 +1,32 @@
+[
+  {
+    "file": "HttpHeader.cc",
+    "source": "aria2/src/HttpHeader.cc",
+    "sha256": "d0cddd1fd3fd0a14695f132a09663cfdb9b87051cec55e23075e68f147f8397d"
+  },
+  {
+    "file": "HttpHeader.h",
+    "source": "aria2/src/HttpHeader.h",
+    "sha256": "39c8fa313e362a00f686592bcb7fa4daab9b7c08499c1de8fe3ce36017012bcf"
+  },
+  {
+    "file": "HttpHeaderProcessor.cc",
+    "source": "aria2/src/HttpHeaderProcessor.cc",
+    "sha256": "0e753f5d54233836eb3a1c8e806599d34537828d25cf34bec85762eb62022d45"
+  },
+  {
+    "file": "HttpHeaderProcessor.h",
+    "source": "aria2/src/HttpHeaderProcessor.h",
+    "sha256": "829fe11da84038db1968ac1bc1f04ee17785877844234235d2c0717b6d9e9f8b"
+  },
+  {
+    "file": "Range.cc",
+    "source": "aria2/src/Range.cc",
+    "sha256": "125e8332a2bfd2357e9890aadb93d8098ea5a48f773dfa3bf734ad7bb36951a3"
+  },
+  {
+    "file": "Range.h",
+    "source": "aria2/src/Range.h",
+    "sha256": "b59d5ca43e000bc458fdb014715971e6398254a059b4f6ff426c0e1ca2b3ee26"
+  }
+]

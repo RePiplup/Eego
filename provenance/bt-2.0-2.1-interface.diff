@@ -1,0 +1,363 @@
+diff --git a/include/libtorrent/disk_interface.hpp b/include/libtorrent/disk_interface.hpp
+index d8fdb76..c6d4b5a 100644
+--- a/include/libtorrent/disk_interface.hpp
++++ b/include/libtorrent/disk_interface.hpp
+@@ -5,31 +5,8 @@ Copyright (c) 2017-2018, Steven Siloti
+ Copyright (c) 2018, Alden Torres
+ All rights reserved.
+ 
+-Redistribution and use in source and binary forms, with or without
+-modification, are permitted provided that the following conditions
+-are met:
+-
+-    * Redistributions of source code must retain the above copyright
+-      notice, this list of conditions and the following disclaimer.
+-    * Redistributions in binary form must reproduce the above copyright
+-      notice, this list of conditions and the following disclaimer in
+-      the documentation and/or other materials provided with the distribution.
+-    * Neither the name of the author nor the names of its
+-      contributors may be used to endorse or promote products derived
+-      from this software without specific prior written permission.
+-
+-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+-POSSIBILITY OF SUCH DAMAGE.
+-
++You may use, distribute and modify this code under the terms of the BSD license,
++see LICENSE file.
+ */
+ 
+ #ifndef TORRENT_DISK_INTERFACE_HPP
+@@ -79,12 +56,41 @@ namespace libtorrent {
+ 
+ 	struct storage_holder;
+ 
+-	using file_open_mode_t = flags::bitfield_flag<std::uint8_t, struct file_open_mode_tag>;
++	// return values from check_fastresume, and move_storage
++	using status_t = flags::bitfield_flag<std::uint8_t, struct disk_storage_status_tag>;
++
++namespace disk_status {
++	// the disk operation could not be completed because of an
++	// unrecoverable error (e.g. failed write). The torrent is paused
++	// and a ``file_error_alert`` is posted.
++	constexpr status_t fatal_disk_error = 0_bit;
++
++	// returned from check_fastresume to indicate that resume data
++	// failed validation and a full piece-hash check is required.
++	constexpr status_t need_full_check = 1_bit;
++
++	// returned from move_storage when the destination already exists
++	// and the ``dont_replace`` flag was set.
++	constexpr status_t file_exist = 2_bit;
++
++	// returned from check_fastresume when a file on disk is larger
++	// than the size recorded in the .torrent metadata.
++	// This triggers an alert to let the user decide whether to truncate the
++	// file or save the torrent in another directory.
++	constexpr status_t oversized_file = 3_bit;
++
++	// Returned by do_job(hash) when the job was hung on a cache piece.
++	// kick_hasher will post it to completed_jobs once hashing finishes.
++	// perform_job() checks this flag before writing j->ret.
++	constexpr status_t job_deferred = 4_bit;
++}
+ 
+ 	// internal
+ 	// this is a bittorrent constant
+ 	constexpr int default_block_size = 0x4000;
+ 
++	using file_open_mode_t = flags::bitfield_flag<std::uint8_t, struct file_open_mode_tag>;
++
+ namespace file_open_mode {
+ 	// open the file for reading only
+ 	constexpr file_open_mode_t read_only{};
+@@ -158,35 +164,36 @@ namespace file_open_mode {
+ 	{
+ 		// force making a copy of the cached block, rather than getting a
+ 		// reference to a block already in the cache. This is used the block is
+-		// expected to be overwritten very soon, by async_write()`, and we need
++		// expected to be overwritten very soon, by async_write(), and we need
+ 		// access to the previous content.
+-		static constexpr disk_job_flags_t force_copy = 0_bit;
++		static inline constexpr disk_job_flags_t force_copy = 0_bit;
+ 
+ 		// hint that there may be more disk operations with sequential access to
+ 		// the file
+-		static constexpr disk_job_flags_t sequential_access = 3_bit;
++		static inline constexpr disk_job_flags_t sequential_access = 3_bit;
+ 
+ 		// don't keep the read block in cache. This is a hint that this block is
+ 		// unlikely to be read again anytime soon, and caching it would be
+ 		// wasteful.
+-		static constexpr disk_job_flags_t volatile_read = 4_bit;
++		static inline constexpr disk_job_flags_t volatile_read = 4_bit;
+ 
+ 		// compute a v1 piece hash. This is only used by the async_hash() call.
+ 		// If this flag is not set in the async_hash() call, the SHA-1 piece
+ 		// hash does not need to be computed.
+-		static constexpr disk_job_flags_t v1_hash = 5_bit;
++		static inline constexpr disk_job_flags_t v1_hash = 5_bit;
+ 
+ 		// this flag instructs a hash job that we just completed this piece, and
+ 		// it should be flushed to disk
+ 		static constexpr disk_job_flags_t flush_piece = 7_bit;
+ 
+-		// this is called when a new torrent is added. The shared_ptr can be
+-		// used to hold the internal torrent object alive as long as there are
+-		// outstanding disk operations on the storage.
++		// this is called when a new torrent is added. The shared_ptr owns the
++		// object ``p.files`` refers into. Holding on to it keeps that
++		// reference valid as long as there are outstanding disk operations on
++		// the storage.
+ 		// The returned storage_holder is an owning reference to the underlying
+ 		// storage that was just created. It is fundamentally a storage_index_t
+-		virtual storage_holder new_torrent(storage_params const& p
+-			, std::shared_ptr<void> const& torrent) = 0;
++		virtual storage_holder new_torrent(
++			storage_params const& p, std::shared_ptr<void> const& owner) = 0;
+ 
+ 		// remove the storage with the specified index. This is not expected to
+ 		// delete any files from disk, just to clean up any resources associated
+@@ -226,6 +233,10 @@ namespace file_open_mode {
+ 		// should not be computed. If v2 is non-empty it must be at least large
+ 		// enough to hold all v2 blocks in the piece, and this function will
+ 		// fill in the span with the SHA-256 block hashes of the piece.
++		//
++		// The contents of the `v2` span on entry are not read by the
++		// implementation; it is treated as output only. Callers may safely
++		// reuse the same buffer across pieces without clearing it.
+ 		virtual void async_hash(storage_index_t storage, piece_index_t piece, span<sha256_hash> v2
+ 			, disk_job_flags_t flags
+ 			, std::function<void(piece_index_t, sha1_hash const&, storage_error const&)> handler) = 0;
+@@ -375,11 +386,15 @@ namespace file_open_mode {
+ 	// inform the disk object.
+ 	struct TORRENT_EXPORT storage_holder
+ 	{
+-		storage_holder() = default;
++		// constructs a storage holder, for storage ``idx`` held at disk
++		// interface ``disk_io``. When the holder is destructed or reset,
++		// ``disk_io`` will be notified that the storage can be removed.
+ 		storage_holder(storage_index_t idx, disk_interface& disk_io)
+ 			: m_disk_io(&disk_io)
+ 			, m_idx(idx)
+ 		{}
++
++		storage_holder() = default;
+ 		~storage_holder()
+ 		{
+ 			if (m_disk_io) m_disk_io->remove_torrent(m_idx);
+@@ -393,6 +408,9 @@ namespace file_open_mode {
+ 			return m_idx;
+ 		}
+ 
++		// release ownership of the storage, removing the torrent from
++		// the disk subsystem. After this call the holder is empty and
++		// ``operator bool()`` returns false.
+ 		void reset()
+ 		{
+ 			if (m_disk_io) m_disk_io->remove_torrent(m_idx);
+diff --git a/src/session.cpp b/src/session.cpp
+index db43896..837ea36 100644
+--- a/src/session.cpp
++++ b/src/session.cpp
+@@ -1,36 +1,13 @@
+ /*
+ 
+ Copyright (c) 2003, Magnus Jonsson
+-Copyright (c) 2003, 2006, 2008-2020, 2022, Arvid Norberg
+-Copyright (c) 2016, Alden Torres
++Copyright (c) 2003, 2006, 2008-2022, Arvid Norberg
++Copyright (c) 2016, 2021, Alden Torres
+ Copyright (c) 2017, 2020, Steven Siloti
+ All rights reserved.
+ 
+-Redistribution and use in source and binary forms, with or without
+-modification, are permitted provided that the following conditions
+-are met:
+-
+-    * Redistributions of source code must retain the above copyright
+-      notice, this list of conditions and the following disclaimer.
+-    * Redistributions in binary form must reproduce the above copyright
+-      notice, this list of conditions and the following disclaimer in
+-      the documentation and/or other materials provided with the distribution.
+-    * Neither the name of the author nor the names of its
+-      contributors may be used to endorse or promote products derived
+-      from this software without specific prior written permission.
+-
+-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+-POSSIBILITY OF SUCH DAMAGE.
+-
++You may use, distribute and modify this code under the terms of the BSD license,
++see LICENSE file.
+ */
+ 
+ #include "libtorrent/config.hpp"
+@@ -42,50 +19,25 @@ POSSIBILITY OF SUCH DAMAGE.
+ #include "libtorrent/disk_interface.hpp"
+ #include "libtorrent/mmap_disk_io.hpp"
+ #include "libtorrent/posix_disk_io.hpp"
+-#include "libtorrent/platform_util.hpp"
++#include "libtorrent/pread_disk_io.hpp"
++#include "libtorrent/aux_/platform_util.hpp"
+ 
+ namespace libtorrent {
+ 
+-#ifndef TORRENT_DISABLE_EXTENSIONS
+-	// declared in extensions.hpp
+-	// remove this once C++17 is required
+-	constexpr feature_flags_t plugin::optimistic_unchoke_feature;
+-	constexpr feature_flags_t plugin::tick_feature;
+-	constexpr feature_flags_t plugin::dht_request_feature;
+-	constexpr feature_flags_t plugin::alert_feature;
+-	constexpr feature_flags_t plugin::unknown_torrent_feature;
+-#endif
+-
+-namespace aux {
+-	constexpr torrent_list_index_t session_interface::torrent_state_updates;
+-	constexpr torrent_list_index_t session_interface::torrent_want_tick;
+-	constexpr torrent_list_index_t session_interface::torrent_want_peers_download;
+-	constexpr torrent_list_index_t session_interface::torrent_want_peers_finished;
+-	constexpr torrent_list_index_t session_interface::torrent_want_scrape;
+-	constexpr torrent_list_index_t session_interface::torrent_downloading_auto_managed;
+-	constexpr torrent_list_index_t session_interface::torrent_seeding_auto_managed;
+-	constexpr torrent_list_index_t session_interface::torrent_checking_auto_managed;
+-}
+-
+-#ifndef TORRENT_DISABLE_EXTENSIONS
+-constexpr add_peer_flags_t torrent_plugin::first_time;
+-constexpr add_peer_flags_t torrent_plugin::filtered;
+-#endif
+-
+ namespace {
+ 
+ #if defined TORRENT_ASIO_DEBUGGING
+ 	void wait_for_asio_handlers()
+ 	{
+ 		int counter = 0;
+-		while (log_async())
++		while (aux::log_async())
+ 		{
+ 			std::this_thread::sleep_for(milliseconds(300));
+ 			++counter;
+ 			std::printf("\x1b[2J\x1b[0;0H\x1b[33m==== Waiting to shut down: %d ==== \x1b[0m\n\n"
+ 				, counter);
+ 		}
+-		async_dec_threads();
++		aux::async_dec_threads();
+ 
+ 		std::fprintf(stderr, "\n\nEXPECTS NO MORE ASYNC OPS\n\n\n");
+ 	}
+@@ -306,6 +258,7 @@ namespace {
+ #endif
+ #endif
+ 
++		// TODO: start() should just use flags out of the session_params object,
+ 		m_impl = std::make_shared<aux::session_impl>(std::ref(*ios)
+ 			, std::move(params.settings)
+ 			, std::move(params.disk_io_constructor)
+@@ -341,7 +294,7 @@ namespace {
+ 			auto s = m_io_service;
+ 			m_thread = std::make_shared<std::thread>([=]
+ 			{
+-				set_thread_name("libtorrent-network-thread");
++				aux::set_thread_name("libtorrent-network-thread");
+ 				s->run();
+ 			});
+ 		}
+@@ -367,14 +320,15 @@ namespace {
+ 
+ 	session::session(session_params const& params)
+ 	{
+-		start({}, session_params(params), nullptr);
++		start(params.flags, session_params(params), nullptr);
+ 	}
+ 
+ 	session::session(session_params&& params)
+ 	{
+-		start({}, std::move(params), nullptr);
++		start(params.flags, std::move(params), nullptr);
+ 	}
+ 
++#if TORRENT_ABI_VERSION < 4
+ 	session::session(session_params const& params, session_flags_t const flags)
+ 	{
+ 		start(flags, session_params(params), nullptr);
+@@ -384,23 +338,25 @@ namespace {
+ 	{
+ 		start(flags, std::move(params), nullptr);
+ 	}
++#endif
+ 
+ 	session::session()
+ 	{
+ 		session_params params;
+-		start({}, std::move(params), nullptr);
++		start(params.flags, std::move(params), nullptr);
+ 	}
+ 
+ 	session::session(session_params&& params, io_context& ios)
+ 	{
+-		start({}, std::move(params), &ios);
++		start(params.flags, std::move(params), &ios);
+ 	}
+ 
+ 	session::session(session_params const& params, io_context& ios)
+ 	{
+-		start({}, session_params(params), &ios);
++		start(params.flags, session_params(params), &ios);
+ 	}
+ 
++#if TORRENT_ABI_VERSION < 4
+ 	session::session(session_params&& params, io_context& ios, session_flags_t const flags)
+ 	{
+ 		start(flags, std::move(params), &ios);
+@@ -410,7 +366,7 @@ namespace {
+ 	{
+ 		start(flags, session_params(params), &ios);
+ 	}
+-
++#endif
+ 
+ #if TORRENT_ABI_VERSION <= 2
+ 	session::session(settings_pack&& pack, session_flags_t const flags)
+@@ -507,7 +463,7 @@ namespace {
+ 		// stop calling the alert notify function now, to avoid it thinking the
+ 		// session is still alive
+ 		m_impl->alerts().set_notify_function({});
+-		return session_proxy(m_io_service, m_thread, m_impl);
++		return {m_io_service, m_thread, m_impl};
+ 	}
+ 
+ 	session_proxy::session_proxy() = default;
+@@ -536,10 +492,11 @@ namespace {
+ 	TORRENT_EXPORT std::unique_ptr<disk_interface> default_disk_io_constructor(
+ 		io_context& ios, settings_interface const& sett, counters& cnt)
+ 	{
+-#if TORRENT_HAVE_MMAP || TORRENT_HAVE_MAP_VIEW_OF_FILE
+-		// TODO: In C++17. use if constexpr instead
++#if TORRENT_HAVE_PREAD || defined TORRENT_WINDOWS
++		return pread_disk_io_constructor(ios, sett, cnt);
++#elif TORRENT_HAVE_MMAP || TORRENT_HAVE_MAP_VIEW_OF_FILE
+ #include "libtorrent/aux_/disable_deprecation_warnings_push.hpp"
+-		if (sizeof(void*) == 8)
++		if constexpr (sizeof(void*) == 8)
+ 			return mmap_disk_io_constructor(ios, sett, cnt);
+ 		else
+ 			return posix_disk_io_constructor(ios, sett, cnt);

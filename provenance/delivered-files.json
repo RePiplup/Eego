@@ -1,0 +1,202 @@
+[
+  {
+    "path": "src/aria2/compat.hpp",
+    "sha256": "d15bca478af0f35255abb885deccc6c77070639515be65d4efd653c76dd80c2c"
+  },
+  {
+    "path": "src/aria2/HttpHeader.cc",
+    "sha256": "836d6e844db44553aacbd20ac455e918e5c376d84334226a39d560a3536e8f0e"
+  },
+  {
+    "path": "src/aria2/HttpHeader.h",
+    "sha256": "99c1b0d8c7641adf8136ef217c85fdd0dc9f77f4f91dfb2a9a5b80c64f9b1d86"
+  },
+  {
+    "path": "src/aria2/HttpHeaderProcessor.cc",
+    "sha256": "ee09fe214c7120dd59c0fb926e38a35032ac3391588be63579e42a1a790e3ef3"
+  },
+  {
+    "path": "src/aria2/HttpHeaderProcessor.h",
+    "sha256": "ce8f31d6d7ab6b6f9f1a163335c1e442dc9679cc20dbf1f36d5f993cc2bb3a5c"
+  },
+  {
+    "path": "src/aria2/Range.cc",
+    "sha256": "2653a170a301f14f3486a5c03cb4cc805730c8874f45ed8fa9a2573fa0c7dc47"
+  },
+  {
+    "path": "src/aria2/Range.h",
+    "sha256": "ed3b4bb10f022a77d13074e2df201865e4ccc14da1f8e76b437b5f28eb162a38"
+  },
+  {
+    "path": "src/bt_disk.cpp",
+    "sha256": "277d33ee8364a845606db3c17a5e8b69bc7d0cb90bc638f39590dc6c3c0643e5"
+  },
+  {
+    "path": "src/bt_disk.hpp",
+    "sha256": "beb8c4348d09d5a9e6fb55400ca37db1ed28220a08e36a81db1d3736ca207ad6"
+  },
+  {
+    "path": "src/checkpoint.cpp",
+    "sha256": "9f88c5e1649f168e420d02f532c0d8ad87f4be83b20afb56c4a53615bf502994"
+  },
+  {
+    "path": "src/checkpoint.hpp",
+    "sha256": "915f0acd971fa9f52ac2a44ba324a427d03035b20329c4f53b9a44edee0cbb87"
+  },
+  {
+    "path": "src/file_store.cpp",
+    "sha256": "0564d64c39f909c69012ffcd8ef47a4c591f870492ceb8f8cf2fd036d408e27c"
+  },
+  {
+    "path": "src/file_store.hpp",
+    "sha256": "ff92ec97ce8df7365b2a61162117c6a6d65609824d3a868fef28e40a5112a745"
+  },
+  {
+    "path": "src/gui.cpp",
+    "sha256": "a671007951196312f1dc901f821b733b47ef3bece76d9d6558daf6e64fd11ab1"
+  },
+  {
+    "path": "src/http.cpp",
+    "sha256": "0a91492ffc7f008912d2005ea75cdd716e89a54bb95a31068dd1272a016e7ee6"
+  },
+  {
+    "path": "src/http.hpp",
+    "sha256": "a361f8b4ef403abc7e034d3963b579c040bf6b07f3c086a1fc880206dce72a59"
+  },
+  {
+    "path": "src/main.cpp",
+    "sha256": "6cccc72bb2fdc7f1743c7aa347b2aeca64a40220333da77d69d617d1b2721900"
+  },
+  {
+    "path": "tests/checkpoint_benchmark.py",
+    "sha256": "86285983296cf3c0644a8eb86eaebb3e8af9a7edcd1695f6080cdc4bd9418bd2"
+  },
+  {
+    "path": "tests/crash_recovery.py",
+    "sha256": "81852986465011964b5d1d8b174ef586d40085ca830088509beb9f2900361200"
+  },
+  {
+    "path": "tests/fixtures/https-source.json",
+    "sha256": "5d302d8d22f6f43123792efe479e1f1f8c0fa61faa68ed237e5bc23af786cb48"
+  },
+  {
+    "path": "tests/fixtures/self-signed.pem",
+    "sha256": "4d3e4ba5c3b0d7ce8bf1e2a711098c38b0c3c196c39ae61c4ee08c8a6e4f69f5"
+  },
+  {
+    "path": "tests/fixtures/test-key.pem",
+    "sha256": "340d5cb4ec76224551a47e5f1788d6b41b07bc9960a8c188ebc3054cda60a680"
+  },
+  {
+    "path": "tests/gui_fixture.py",
+    "sha256": "9bb3d1cca6e82a0043e5a40d7ac29d8d2b38338665cb1b73e0e81398657e8189"
+  },
+  {
+    "path": "tests/gui_verify.py",
+    "sha256": "d663033501f44d572b192c7d7040dec1e7aedf9f4385ab0160079501526ea5d3"
+  },
+  {
+    "path": "tests/integration.py",
+    "sha256": "a202007b2addf712cc72a44ed33c216887b53a56fff8ecd9be6f555372e9825d"
+  },
+  {
+    "path": "tests/parser_test.cpp",
+    "sha256": "5e002115a74be2d91f1f0a5606b6e49a6e7b96bfb97c886f8690f63980054bad"
+  },
+  {
+    "path": "tests/test_compat.hpp",
+    "sha256": "2190abf9947675010e05cf5560d6ac892d11039c99a04e70dfbd3edda1723992"
+  },
+  {
+    "path": "tests/upstream_header_test.cpp",
+    "sha256": "0be84f218efd886a87e89a57fd5f59286c0438d54d9dd61ed5f8cc5c1aeaf959"
+  },
+  {
+    "path": "tools/accept_package.py",
+    "sha256": "9991b8f27af09bec9957f2c417771654a009e6f1609f82871cd84228f0f8e3a3"
+  },
+  {
+    "path": "tools/bootstrap.py",
+    "sha256": "a645edee91a9b56f41b162108e6c70c4349ebef5312cc59e8b83f9cba3f61b31"
+  },
+  {
+    "path": "tools/build.ps1",
+    "sha256": "49a566bb24df0e98edff5499de2bda5a1e40eafbb6ae06a1f52df08b52052f66"
+  },
+  {
+    "path": "tools/create_test_cert.py",
+    "sha256": "2da82cc967de696bf4a70296614631df2f2e9336a0b76f0da11153866883d730"
+  },
+  {
+    "path": "tools/freeze.py",
+    "sha256": "7392a066b06670440fba6bcdaa9a3a1f35de9eb8e88ea0a2d11e5c15cd4c57af"
+  },
+  {
+    "path": "tools/import_http.py",
+    "sha256": "90f98ac4e5029a5f649fa5f34c4c7690e2cfe7b8df75a25773526183e03a8cdc"
+  },
+  {
+    "path": "tools/package.py",
+    "sha256": "2f7b4ea0ec266c2a742c7e90021a73e70c005fb5534b067984d914f3dca81274"
+  },
+  {
+    "path": "tools/record_results.py",
+    "sha256": "ed087d844f970de71295e3543a93727008e66a0f8bbe1e591e9db61350515c50"
+  },
+  {
+    "path": "LICENSES/aria2-GPL-2.0.txt",
+    "sha256": "189b1af95d661151e054cea10c91b3d754e4de4d3fecfb074c1fb29476f7167b"
+  },
+  {
+    "path": "LICENSES/boost.txt",
+    "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+  },
+  {
+    "path": "LICENSES/compiler-rt.txt",
+    "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+  },
+  {
+    "path": "LICENSES/COPYING",
+    "sha256": "99a69660981156c21336fdb5661f89341b013c94e4bf9e1c7467b4745718397f"
+  },
+  {
+    "path": "LICENSES/COPYING.MinGW-w64-runtime.txt",
+    "sha256": "1db8da07b436c68833c0673ffee3d9fcb2526047f3820b81661865dfedc79a1f"
+  },
+  {
+    "path": "LICENSES/COPYING.MinGW-w64.txt",
+    "sha256": "f38e6194bd3bfa1b654f118e5acefe0aead437bbe669eee43957ccc65a7127f1"
+  },
+  {
+    "path": "LICENSES/COPYING.winpthreads.txt",
+    "sha256": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177"
+  },
+  {
+    "path": "LICENSES/COPYING.winstorecompat.txt",
+    "sha256": "fa7368d1f93d890c173177475d8ec7aff265a7d08f1f364d66f74d138978ce36"
+  },
+  {
+    "path": "LICENSES/libcxx.txt",
+    "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+  },
+  {
+    "path": "LICENSES/libtorrent-custom-storage.txt",
+    "sha256": "e5149b6da2c1fa947bc75dc9da4cb10bc79a0f34e0e111cc9a29d3f2de3a5124"
+  },
+  {
+    "path": "LICENSES/libtorrent.txt",
+    "sha256": "cf49a9407ed980decc8323e8363f302532c770ad99630911f3b24f2c9a1ee43a"
+  },
+  {
+    "path": "LICENSES/libunwind.txt",
+    "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+  },
+  {
+    "path": "LICENSES/llvm-mingw.txt",
+    "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+  },
+  {
+    "path": "LICENSES/python-3.12.7.txt",
+    "sha256": "e502c6b880ff58d614901495a9009c136539cd0b1e2a2abb8fc00b934c203419"
+  }
+]

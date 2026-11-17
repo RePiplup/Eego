@@ -1,0 +1,2 @@
+#define HBT_VERSION_TUPLE @desktop_version_tuple@,0
+#define HBT_VERSION_STRING "@desktop_version@"

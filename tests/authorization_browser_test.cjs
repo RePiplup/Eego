@@ -1,0 +1,32 @@
+const fs=require('fs'),path=require('path'),assert=require('assert/strict');
+const {chromium}=require('C:/Users/12534/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const root=path.resolve(__dirname,'..'),run=path.join(root,'artifacts/test-runs','authorization-browser-'+Date.now());
+fs.mkdirSync(run,{recursive:true});const ext=path.join(run,'extension');fs.cpSync(path.join(root,'browser/extension'),ext,{recursive:true});
+// No native tasks, user profile, permission grants or network downloads.
+fs.appendFileSync(path.join(ext,'worker.js'),`\nlet fixtureStatus=2;chrome.runtime.sendNativeMessage=async(host,msg)=>{if(msg.url)fixtureStatus=msg.url.includes('/auth')?5:2;return {accepted:true,task_id:1,status:fixtureStatus};};`);
+let context;
+(async()=>{try{
+ context=await chromium.launchPersistentContext(path.join(run,'profile'),{channel:'msedge',headless:true,chromiumSandbox:true,ignoreDefaultArgs:['--disable-extensions'],args:['--disable-extensions-except='+ext,'--load-extension='+ext]});
+ const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker',{timeout:15000});
+ const page=await context.newPage();await page.setViewportSize({width:400,height:760});
+ const popup='chrome-extension://'+new URL(worker.url()).host+'/popup.html';
+ await worker.evaluate(()=>chrome.storage.local.set({sessionSite:'https://old.example'}));
+ await page.goto(popup);await page.waitForTimeout(100);
+ assert.equal(await page.locator('#authorization').isVisible(),false);
+ await page.screenshot({path:path.join(run,'ordinary.png')});
+ await worker.evaluate(()=>send('https://a.example/auth'));
+ await page.locator('#authorization').waitFor({state:'visible'});
+ assert.match(await page.locator('#sessionSite').innerText(),/https:\/\/a.example/);
+ await page.screenshot({path:path.join(run,'authorization.png')});
+ await page.locator('#url').fill('https://b.example/file');
+ await page.locator('#authorization').waitFor({state:'hidden'});
+ await page.locator('#url').fill('');
+ await page.locator('#authorization').waitFor({state:'visible'});
+ await page.locator('#dismissAuth').click();
+ await page.locator('#authorization').waitFor({state:'hidden'});
+ await page.reload();assert.equal(await page.locator('#authorization').isVisible(),false);
+ await worker.evaluate(()=>send('https://a.example/auth'));await page.locator('#authorization').waitFor({state:'visible'});
+ await worker.evaluate(()=>send('https://b.example/file'));await page.locator('#authorization').waitFor({state:'hidden'});
+ const result={passed:true,checks:['legacy site hidden','ordinary popup hidden','auth failure shows matching site','other input hides stale site','dismiss persists through reopen','next ordinary download clears hint']};
+ fs.writeFileSync(path.join(run,'results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify({...result,run}));
+ }finally{if(context)await context.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
