@@ -48,6 +48,8 @@ jobs:
           }
       - name: Install, open Eego, create a task and check an in-place update
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           $installer = (Get-Item *-setup.exe).FullName
           $app = Join-Path $env:LOCALAPPDATA 'Programs/Eego'
@@ -79,8 +81,22 @@ jobs:
           $record = Get-FileHash "$library/tasks.record"
           $downloads = New-Item -ItemType Directory -Force "$app/Downloads"
           Set-Content "$downloads/upgrade-fixture.bin" 'preserve this file'
-          & "$app/Browser-Setup.cmd"
-          if ($LASTEXITCODE) { throw 'Browser setup failed' }
+          $autoRegistersHost = [version]$env:RELEASE_TAG.Substring(1) -gt [version]'0.10.4'
+          if ($autoRegistersHost -and !(Test-Path previous)) {
+            foreach ($browser in 'Microsoft/Edge','Google/Chrome') {
+              $key = Get-Item "HKCU:/Software/$browser/NativeMessagingHosts/org.handmadebt.bridge"
+              if ($key.GetValue('') -ne "$app\browser\native-host.json") { throw 'Fresh install did not register browser host' }
+            }
+          }
+          if ($autoRegistersHost) {
+            foreach ($browser in 'Microsoft/Edge','Google/Chrome') {
+              $key = New-Item "HKCU:/Software/$browser/NativeMessagingHosts/org.handmadebt.bridge" -Force
+              $key.SetValue('', "$env:RUNNER_TEMP\dev\browser\native-host.json")
+            }
+          } else {
+            & "$app/Browser-Setup.cmd"
+            if ($LASTEXITCODE) { throw 'Browser setup failed' }
+          }
           Install-Eego $installer
           if ((Get-FileHash "$library/tasks.record").Hash -ne $record.Hash) { throw 'Task record changed during install' }
           if ((Get-Content "$downloads/upgrade-fixture.bin") -ne 'preserve this file') { throw 'Download changed' }
