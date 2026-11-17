@@ -1,0 +1,61 @@
+name: Check live in-app upgrade
+on:
+  workflow_dispatch:
+    inputs:
+      from_tag:
+        description: Older published version with in-app updates
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  one-click-upgrade:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - name: Install older release, accept its update prompt and verify the installed result
+        shell: powershell
+        env:
+          FROM_TAG: ${{ inputs.from_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:FROM_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Invalid source tag' }
+          $base = "https://github.com/$env:GITHUB_REPOSITORY/releases"
+          Invoke-WebRequest -UseBasicParsing "$base/latest/download/eego-update.json" -OutFile update.json
+          $latest = Get-Content update.json -Raw | ConvertFrom-Json
+          if ([version]$latest.tag.Substring(1) -le [version]$env:FROM_TAG.Substring(1)) { throw 'Expected a newer release' }
+          $name = "Eego-$($env:FROM_TAG.Substring(1))-windows-x64-setup.exe"
+          $url = "$base/download/$env:FROM_TAG/$name"
+          Invoke-WebRequest -UseBasicParsing $url -OutFile $name
+          $digest = (Invoke-WebRequest -UseBasicParsing "$url.sha256").Content
+          if ($digest -is [byte[]]) { $digest = [Text.Encoding]::UTF8.GetString($digest) }
+          if ((Get-FileHash $name).Hash -ne ($digest -split '\s+')[0]) { throw 'Invalid source installer' }
+          $setup = Start-Process ".\$name" -ArgumentList '/VERYSILENT','/NORESTART' -PassThru -Wait
+          if ($setup.ExitCode) { throw 'Initial installation failed' }
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\Eego'
+          $old = Start-Process "$dir\HandmadeBTQuick.exe" -WorkingDirectory $dir -PassThru
+          Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes
+          $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+          $condition = New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty, '下载并安装')
+          $deadline = [datetime]::UtcNow.AddSeconds(90)
+          do {
+            $buttons = $desktop.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+            $button = $buttons | Where-Object { $_.Current.ProcessId -eq $old.Id } | Select-Object -First 1
+            if (!$button) { Start-Sleep -Milliseconds 500 }
+          } until ($button -or [datetime]::UtcNow -gt $deadline)
+          if (!$button) { throw 'The running application did not offer the latest version' }
+          $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+          if (!$old.WaitForExit(300000)) { throw 'The updater did not shut the old app down' }
+          $deadline = [datetime]::UtcNow.AddSeconds(120)
+          do {
+            $new = Get-Process HandmadeBTQuick -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $old.Id -and $_.MainWindowHandle -and $_.Path -eq "$dir\HandmadeBTQuick.exe" }
+            if (!$new) { Start-Sleep -Milliseconds 500 }
+          } until ($new -or [datetime]::UtcNow -gt $deadline)
+          if (!$new) { throw 'The upgraded application did not reopen' }
+          $installed = Get-Content "$dir\manifest.json" -Raw | ConvertFrom-Json
+          if ("v$($installed.version)" -ne $latest.tag) { throw 'Wrong installed version' }
+          if ((Get-FileHash "$dir\HandmadeBTQuick.exe").Hash -ne $installed.files.'HandmadeBTQuick.exe') { throw 'Installed UI checksum mismatch' }
+          Write-Host "Verified in-app upgrade from $env:FROM_TAG to $($latest.tag)"
