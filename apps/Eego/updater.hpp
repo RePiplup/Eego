@@ -1,6 +1,7 @@
 #pragma once
 #include <QNetworkAccessManager>
 #include <QObject>
+#include <memory>
 #include <QString>
 
 class Updater final : public QObject {
@@ -12,6 +13,8 @@ public:
 signals:
     void installationReady();
 private:
+    struct Transfer;
+    void fetchPart(const std::shared_ptr<Transfer> &transfer);
     void download(const QUrl &url, const QString &name, QByteArray expectedHash, qint64 size);
     QNetworkAccessManager &network;
     bool busy = false;

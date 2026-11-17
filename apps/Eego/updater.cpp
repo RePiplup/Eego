@@ -14,6 +14,7 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QVersionNumber>
+#include <QTimer>
 #include <memory>
 
 namespace {
@@ -70,6 +71,17 @@ void Updater::check(bool manual) {
     });
 }
 
+struct Updater::Transfer {
+    QUrl origin;
+    QUrl source;
+    std::shared_ptr<QSaveFile> file;
+    QByteArray digest;
+    qint64 size;
+    QProgressDialog *progress;
+    QCryptographicHash hash{QCryptographicHash::Sha256};
+    int retries = 0;
+};
+
 void Updater::download(const QUrl &url, const QString &name, QByteArray expectedHash, qint64 size) {
     const QDir cache(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/updates");
     auto file = std::make_shared<QSaveFile>(cache.filePath(name));
@@ -78,38 +90,75 @@ void Updater::download(const QUrl &url, const QString &name, QByteArray expected
         QMessageBox::warning(nullptr, tr("更新失败"), tr("无法写入更新缓存。"));
         return;
     }
-    auto hash = std::make_shared<QCryptographicHash>(QCryptographicHash::Sha256);
     auto *progress = new QProgressDialog(tr("正在下载安装包…"), tr("取消"), 0, 100);
     progress->setWindowTitle(tr("更新 Eego"));
     progress->setAutoClose(false);
     progress->setAutoReset(false);
     progress->show();
-    auto *reply = network.get(request(url));
-    reply->setReadBufferSize(1024 * 1024);
-    connect(progress, &QProgressDialog::canceled, reply, &QNetworkReply::abort);
-    auto consume = [=] {
-        const QByteArray data = reply->readAll();
-        if (data.isEmpty()) return;
-        if (file->pos() + data.size() > size || file->write(data) != data.size()) {
-            reply->abort();
-            return;
-        }
-        hash->addData(data);
-        progress->setValue(int(file->pos() * 100 / size));
-    };
-    connect(reply, &QIODevice::readyRead, this, consume);
+    auto transfer = std::shared_ptr<Transfer>(new Transfer{url, url, file, expectedHash, size, progress});
+    fetchPart(transfer);
+}
+
+void Updater::fetchPart(const std::shared_ptr<Transfer> &transfer) {
+    const qint64 start = transfer->file->pos();
+    const qint64 end = qMin(start + 4 * 1024 * 1024 - 1, transfer->size - 1);
+    const auto range = QByteArray::number(start) + "-" + QByteArray::number(end);
+    auto r = request(transfer->source);
+    r.setRawHeader("Range", "bytes=" + range);
+    r.setRawHeader("Accept-Encoding", "identity");
+    auto *reply = network.get(r);
+    connect(transfer->progress, &QProgressDialog::canceled, reply, &QNetworkReply::abort);
+    // Accumulate one bounded part. A failed part can be requested again without
+    // writing duplicate bytes or invalidating the hash of previous parts.
+    connect(reply, &QIODevice::readyRead, this, [reply, start, end] {
+        if (reply->bytesAvailable() > end - start + 1) reply->abort();
+    });
     connect(reply, &QNetworkReply::finished, this, [=] {
         reply->deleteLater();
-        progress->deleteLater();
-        if (!reply->error()) consume();
-        const bool canceled = progress->wasCanceled();
-        if (canceled || reply->error() || file->pos() != size || hash->result().toHex() != expectedHash || !file->commit()) {
+        auto *progress = transfer->progress;
+        if (progress->wasCanceled()) {
+            progress->deleteLater();
             busy = false;
-            if (!canceled) QMessageBox::warning(nullptr, tr("更新失败"), tr("下载或完整性校验失败。可在设置中重试。"));
             return;
         }
-        installer = file->fileName();
-        emit installationReady();
+        const QByteArray bytes = reply->readAll();
+        const QByteArray contentRange = "bytes " + range + "/" + QByteArray::number(transfer->size);
+        const bool wholeFile = start == 0 && end + 1 == transfer->size;
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool validRange = status == 206 && reply->rawHeader("Content-Range") == contentRange;
+        if (reply->error() || bytes.size() != end - start + 1 || !(validRange || (wholeFile && status == 200))) {
+            if (++transfer->retries <= 3) {
+                transfer->source = transfer->origin;
+                QTimer::singleShot(500 * transfer->retries, this, [this, transfer] {
+                    if (!transfer->progress->wasCanceled()) fetchPart(transfer);
+                    else { transfer->progress->deleteLater(); busy = false; }
+                });
+                return;
+            }
+            busy = false;
+            progress->deleteLater();
+            QMessageBox::warning(nullptr, tr("更新失败"), tr("安装包下载中断，请检查网络后重试。"));
+            return;
+        }
+        if (transfer->file->write(bytes) == bytes.size()) {
+            transfer->hash.addData(bytes);
+            progress->setValue(int(transfer->file->pos() * 100 / transfer->size));
+            if (transfer->file->pos() < transfer->size) {
+                transfer->source = reply->url();
+                transfer->retries = 0;
+                fetchPart(transfer);
+                return;
+            }
+            if (transfer->hash.result().toHex() == transfer->digest && transfer->file->commit()) {
+                progress->deleteLater();
+                installer = transfer->file->fileName();
+                emit installationReady();
+                return;
+            }
+        }
+        busy = false;
+        progress->deleteLater();
+        QMessageBox::warning(nullptr, tr("更新失败"), tr("文件写入或完整性校验失败。可在设置中重试。"));
     });
 }
 
