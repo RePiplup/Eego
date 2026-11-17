@@ -1,0 +1,72 @@
+name: Check Windows installer
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to test (drafts supported)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  install-and-upgrade:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - name: Download installer and check SHA-256
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Invalid version tag' }
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-setup.exe*'
+          if ($LASTEXITCODE) { throw 'Release download failed' }
+          $installer = Get-Item "Eego-$($env:RELEASE_TAG.Substring(1))-windows-x64-setup.exe"
+          if ((Get-FileHash $installer).Hash -ne ((Get-Content "$installer.sha256") -split '\s+')[0]) { throw 'Installer checksum mismatch' }
+      - name: Install, open Eego, create a task and check an in-place update
+        shell: pwsh
+        run: |
+          $installer = (Get-Item *-setup.exe).FullName
+          $app = Join-Path $env:LOCALAPPDATA 'Programs/Eego'
+          if (Test-Path $app) { throw 'Expected a fresh Windows profile' }
+          function Install-Eego {
+            $proc = Start-Process $installer -ArgumentList '/VERYSILENT','/NORESTART','/SUPPRESSMSGBOXES' -PassThru -Wait
+            if ($proc.ExitCode) { throw "Installer returned $($proc.ExitCode)" }
+          }
+          Install-Eego
+          $env:Path = "$env:SystemRoot\system32;$env:SystemRoot"
+          $library = Join-Path $app 'userdata'
+          $service = Join-Path $app 'core/task_service_host_r3.exe'
+          $ui = Start-Process "$app/HandmadeBTQuick.exe" -ArgumentList '--data-dir',"$env:RUNNER_TEMP/ui-smoke" -WorkingDirectory $app -PassThru
+          try {
+            $deadline = [datetime]::UtcNow.AddSeconds(40)
+            while (!$ui.HasExited -and !$ui.MainWindowHandle -and [datetime]::UtcNow -lt $deadline) {
+              Start-Sleep -Milliseconds 200
+              $ui.Refresh()
+            }
+            if (!$ui.MainWindowHandle -or !$ui.Responding) { throw 'No responsive Eego window' }
+          } finally {
+            if (!$ui.HasExited) { $ui.Kill($true) }
+          }
+          $stop = '{"op":"shutdown","requestId":"stop"}'
+          $created = @('{"op":"create","requestId":"add","url":"https://example.invalid/upgrade-fixture.bin"}', $stop) | & $service --data-dir $library
+          if ($LASTEXITCODE -or !($created[0] | ConvertFrom-Json).ok) { throw 'Could not create test task' }
+          $id = ($created[0] | ConvertFrom-Json).id
+          if (!$id) { throw 'Missing task id' }
+          $record = Get-FileHash "$library/tasks.record"
+          $downloads = New-Item -ItemType Directory -Force "$app/Downloads"
+          Set-Content "$downloads/upgrade-fixture.bin" 'preserve this file'
+          & "$app/Browser-Setup.cmd"
+          if ($LASTEXITCODE) { throw 'Browser setup failed' }
+          Install-Eego
+          if ((Get-FileHash "$library/tasks.record").Hash -ne $record.Hash) { throw 'Task record changed during install' }
+          if ((Get-Content "$downloads/upgrade-fixture.bin") -ne 'preserve this file') { throw 'Download changed' }
+          $listed = @('{"op":"list","requestId":"check"}', $stop) | & $service --data-dir $library
+          if ($LASTEXITCODE -or $id -notin ($listed[0] | ConvertFrom-Json).tasks.id) { throw 'Saved task could not be reopened' }
+          foreach ($browser in 'Microsoft/Edge','Google/Chrome') {
+            $key = Get-Item "HKCU:/Software/$browser/NativeMessagingHosts/org.handmadebt.bridge"
+            if ($key.GetValue('') -ne "$app\browser\native-host.json") { throw 'Browser registration changed' }
+          }
