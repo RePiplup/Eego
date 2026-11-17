@@ -102,10 +102,14 @@ jobs:
             $guide = Join-Path $app 'browser\Enable-EdgeAssistant.ps1'
             $shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Eego\启用 Edge 下载助手.lnk'
             if (!(Test-Path $guide) -or !(Test-Path $shortcutPath)) { throw 'Missing Edge setup guide' }
-            $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
-            if (!(Test-Path -LiteralPath $shortcut.TargetPath)) { throw "Missing shortcut target $($shortcut.TargetPath)" }
-            if ($shortcut.Arguments -notmatch '-File\s+"([^"]+)"') { throw "Missing guide argument in $($shortcut.Arguments)" }
-            if ((Get-Item -LiteralPath $Matches[1]).FullName -ne (Get-Item -LiteralPath $guide).FullName) { throw "Incorrect guide path in $($shortcut.Arguments)" }
+            Start-Process -FilePath $shortcutPath
+            $limit = [datetime]::UtcNow.AddSeconds(30)
+            do {
+              $dialog = Get-Process powershell -ErrorAction SilentlyContinue | Where-Object MainWindowTitle -eq '启用 Eego 下载助手'
+              if (!$dialog) { Start-Sleep -Milliseconds 250 }
+            } until ($dialog -or [datetime]::UtcNow -ge $limit)
+            if (!$dialog) { throw 'The installed shortcut did not open the Edge setup dialog' }
+            $dialog | Stop-Process
             $ext = Get-Content "$app/browser/extension/manifest.json" -Raw | ConvertFrom-Json
             if ($ext.version -ne $env:RELEASE_TAG.Substring(1)) { throw 'Extension release version mismatch' }
           }
