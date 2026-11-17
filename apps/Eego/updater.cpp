@@ -30,18 +30,17 @@ void Updater::check(bool manual) {
     if (manual) reportResult = true;
     if (busy) return;
     busy = true;
-    auto *reply = network.get(request(QUrl("https://api.github.com/repos/RePiplup/Eego/releases/latest")));
+    auto *reply = network.get(request(QUrl("https://github.com/RePiplup/Eego/releases/latest/download/eego-update.json")));
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         reply->deleteLater();
         const bool notify = reportResult;
         reportResult = false;
         busy = false;
         const auto release = QJsonDocument::fromJson(reply->readAll()).object();
-        const QString tag = release.value("tag_name").toString();
+        const QString tag = release.value("tag").toString();
         static const QRegularExpression stable("^v([0-9]+\\.[0-9]+\\.[0-9]+)$");
         const auto match = stable.match(tag);
-        if (reply->error() || !match.hasMatch() || release.value("draft").toBool(true) ||
-            release.value("prerelease").toBool(true)) {
+        if (reply->error() || !match.hasMatch()) {
             if (notify) QMessageBox::information(nullptr, tr("检查更新"), tr("无法读取正式版本信息，请检查网络后重试。"));
             return;
         }
@@ -52,14 +51,10 @@ void Updater::check(bool manual) {
         }
         const QString name = "Eego-" + version + "-windows-x64-setup.exe";
         const QString url = "https://github.com/RePiplup/Eego/releases/download/" + tag + "/" + name;
-        for (const auto assetValue : release.value("assets").toArray()) {
-            const auto asset = assetValue.toObject();
-            const QString digest = asset.value("digest").toString();
-            static const QRegularExpression sha("^sha256:([0-9a-f]{64})$");
-            const auto hash = sha.match(digest);
-            const qint64 size = asset.value("size").toInteger();
-            if (asset.value("name").toString() != name || asset.value("browser_download_url").toString() != url ||
-                !hash.hasMatch() || size <= 0 || size > 2147483648LL) continue;
+        static const QRegularExpression sha("^[0-9a-f]{64}$");
+        const auto digest = release.value("sha256").toString();
+        const qint64 size = release.value("size").toInteger();
+        if (release.value("name").toString() == name && sha.match(digest).hasMatch() && size > 0 && size <= 2147483648LL) {
             busy = true;
             QMessageBox prompt(QMessageBox::Information, tr("发现新版本"),
                 tr("Eego %1 已发布。下载完成后将保存任务、退出并覆盖安装。").arg(version), QMessageBox::NoButton);
@@ -67,7 +62,7 @@ void Updater::check(bool manual) {
             prompt.addButton(tr("稍后"), QMessageBox::RejectRole);
             prompt.exec();
             if (prompt.clickedButton() == install)
-                download(QUrl(url), name, hash.captured(1).toLatin1(), size);
+                download(QUrl(url), name, digest.toLatin1(), size);
             else busy = false;
             return;
         }

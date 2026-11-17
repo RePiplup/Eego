@@ -21,7 +21,7 @@ public:
         const auto url = request.url().toString();
         requests.append(url);
         QString file = "missing";
-        if (url == "https://api.github.com/repos/RePiplup/Eego/releases/latest") file = "metadata";
+        if (url == "https://github.com/RePiplup/Eego/releases/latest/download/eego-update.json") file = "metadata";
         if (url == assetUrl) file = "asset";
         return QNetworkAccessManager::createRequest(op, QNetworkRequest(QUrl::fromLocalFile(files.filePath(file))), data);
     }
@@ -37,9 +37,8 @@ int main(int argc, char **argv) {
     FixtureNetwork network;
     const QByteArray bytes("fixture installer bytes");
     const QByteArray digest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
-    const QJsonObject asset{{"name","Eego-0.10.2-windows-x64-setup.exe"},{"browser_download_url",network.assetUrl},
-                            {"size",bytes.size()},{"digest","sha256:" + QString::fromLatin1(digest)}};
-    const QJsonObject release{{"tag_name","v0.10.2"},{"draft",false},{"prerelease",false},{"assets",QJsonArray{asset}}};
+    const QJsonObject release{{"tag","v0.10.2"},{"name","Eego-0.10.2-windows-x64-setup.exe"},
+                              {"size",bytes.size()},{"sha256",QString::fromLatin1(digest)}};
     QFile metadata(network.files.filePath("metadata")), payload(network.files.filePath("asset"));
     if (!metadata.open(QIODevice::WriteOnly) || !payload.open(QIODevice::WriteOnly)) return 2;
     metadata.write(QJsonDocument(release).toJson());

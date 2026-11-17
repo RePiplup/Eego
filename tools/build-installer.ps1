@@ -39,6 +39,8 @@ try {
     $name = "Eego-$Version-windows-x64-setup.exe"
     $hash = (Get-FileHash -LiteralPath "$dist/$name").Hash.ToLowerInvariant()
     [IO.File]::WriteAllText("$dist/$name.sha256", "$hash  $name`n")
+    $update = [ordered]@{ tag = "v$Version"; name = $name; size = (Get-Item "$dist/$name").Length; sha256 = $hash }
+    [IO.File]::WriteAllText("$dist/eego-update.json", ($update | ConvertTo-Json))
 } finally {
     $resolved = (Resolve-Path -LiteralPath $stage).Path
     if ((Split-Path $resolved -Parent) -eq $dist -and (Split-Path $resolved -Leaf) -match '^installer-stage-[0-9a-f-]{36}$') {

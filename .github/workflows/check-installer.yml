@@ -31,6 +31,14 @@ jobs:
           if ($LASTEXITCODE) { throw 'Release download failed' }
           $installer = Get-Item "Eego-$($env:RELEASE_TAG.Substring(1))-windows-x64-setup.exe"
           if ((Get-FileHash $installer).Hash -ne ((Get-Content "$installer.sha256") -split '\s+')[0]) { throw 'Installer checksum mismatch' }
+          if ([version]$env:RELEASE_TAG.Substring(1) -ge [version]'0.10.2') {
+            gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern 'eego-update.json'
+            if ($LASTEXITCODE) { throw 'Update manifest missing' }
+            $update = Get-Content eego-update.json -Raw | ConvertFrom-Json
+            if ($update.tag -ne $env:RELEASE_TAG -or $update.name -ne $installer.Name -or $update.size -ne $installer.Length -or $update.sha256 -ne (Get-FileHash $installer).Hash) {
+              throw 'In-app update metadata does not match the release'
+            }
+          }
           if ($env:PREVIOUS_TAG) {
             if ($env:PREVIOUS_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Invalid previous version' }
             gh release download $env:PREVIOUS_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-setup.exe*' --dir previous
