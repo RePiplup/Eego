@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to test (drafts supported)
+        description: Published release or prerelease tag to test
         required: true
         type: string
 

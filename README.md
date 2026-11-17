@@ -6,6 +6,8 @@
 
 **维护者发版**　在完成下文的依赖准备后运行 `./apps/Eego/build.ps1`，再运行 `./tools/build-installer.ps1 -Version 0.10.0`（后续替换为新版本号，需 Inno Setup 6）。测试首次安装和覆盖升级，提交源码并推送，为该提交创建并推送同名版本标签（例如 `v0.10.0`）。在 GitHub Release 附上 `dist` 下对应版本的安装程序、`.sha256` 和更新说明。
 
+发布前可先在 GitHub 将该版本设为 **Pre-release**，然后在 **Actions → Check Windows installer → Run workflow** 输入标签。工作流会下载附件、核对 SHA-256，在独立 Windows 环境安装并打开软件，创建测试任务，覆盖安装同一版本，再检查任务、下载文件和浏览器主机注册。通过后，在 Release 编辑页取消 **Pre-release**，设为最新正式版。
+
 ## 本地开发工作区
 
 当前正式启动入口：双击根目录 Eego.exe（原生 Windows 无控制台启动器）。它启动现有统一版，固定活动库为 D:/CXworkspace/HandmadeBT-data/production。请保留现有应用目录和 Qt 依赖文件；这不是单文件应用。旧脚本仅保留兼容。
