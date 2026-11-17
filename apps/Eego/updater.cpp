@@ -104,15 +104,20 @@ void Updater::fetchPart(const std::shared_ptr<Transfer> &transfer) {
     const qint64 end = qMin(start + 4 * 1024 * 1024 - 1, transfer->size - 1);
     const auto range = QByteArray::number(start) + "-" + QByteArray::number(end);
     auto r = request(transfer->source);
+    r.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     r.setRawHeader("Range", "bytes=" + range);
     r.setRawHeader("Accept-Encoding", "identity");
     auto *reply = network.get(r);
     connect(transfer->progress, &QProgressDialog::canceled, reply, &QNetworkReply::abort);
     // Accumulate one bounded part. A failed part can be requested again without
     // writing duplicate bytes or invalidating the hash of previous parts.
-    connect(reply, &QIODevice::readyRead, this, [reply, start, end] {
-        if (reply->bytesAvailable() > end - start + 1) reply->abort();
-    });
+    auto part = std::make_shared<QByteArray>();
+    const auto consume = [reply, part, start, end] {
+        part->append(reply->readAll());
+        if (part->size() > end - start + 1 && !reply->isFinished()) reply->abort();
+    };
+    connect(reply, &QIODevice::readyRead, this, consume);
+    QTimer::singleShot(90000, reply, [reply] { if (!reply->isFinished()) reply->abort(); });
     connect(reply, &QNetworkReply::finished, this, [=] {
         reply->deleteLater();
         auto *progress = transfer->progress;
@@ -121,7 +126,8 @@ void Updater::fetchPart(const std::shared_ptr<Transfer> &transfer) {
             busy = false;
             return;
         }
-        const QByteArray bytes = reply->readAll();
+        consume();
+        const QByteArray &bytes = *part;
         const QByteArray contentRange = "bytes " + range + "/" + QByteArray::number(transfer->size);
         const bool wholeFile = start == 0 && end + 1 == transfer->size;
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();

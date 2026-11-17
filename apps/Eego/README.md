@@ -38,6 +38,6 @@ UI 源码采用 GPL-2.0-or-later。发布时保留原核心、aria2 派生代码
 
 ## 发布 Windows 安装包
 
-先更新 `apps/Eego/CMakeLists.txt` 的项目版本号，准备好构建依赖后运行 `./apps/Eego/build.ps1`，再运行 `./tools/build-installer.ps1 -Version 0.10.3`（后续替换为新版本号，需 Inno Setup 6）。测试首次安装和覆盖升级，提交源码并推送，为该提交创建并推送同名版本标签（例如 `v0.10.3`）。在 GitHub Release 附上 `dist` 下对应版本的安装程序、`.sha256`、本次构建的 `eego-update.json` 和更新说明。
+先更新 `apps/Eego/CMakeLists.txt` 的项目版本号，准备好构建依赖后运行 `./apps/Eego/build.ps1`，再运行 `./tools/build-installer.ps1 -Version 0.10.4`（后续替换为新版本号，需 Inno Setup 6）。测试首次安装和覆盖升级，提交源码并推送，为该提交创建并推送同名版本标签（例如 `v0.10.4`）。在 GitHub Release 附上 `dist` 下对应版本的安装程序、`.sha256`、本次构建的 `eego-update.json` 和更新说明。
 
 发布前可先在 GitHub 将该版本设为 **Pre-release**，然后在 **Actions → Check Windows installer → Run workflow** 输入标签。工作流会下载附件、核对 SHA-256，在独立 Windows 环境安装并打开软件，创建测试任务，覆盖安装目标版本（可通过 previous_tag 指定旧版本），再检查任务、下载文件和浏览器主机注册。通过后，在 Release 编辑页取消 **Pre-release**，设为最新正式版。
