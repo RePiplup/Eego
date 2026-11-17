@@ -103,7 +103,9 @@ jobs:
             $shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Eego\启用 Edge 下载助手.lnk'
             if (!(Test-Path $guide) -or !(Test-Path $shortcutPath)) { throw 'Missing Edge setup guide' }
             $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
-            if (!$shortcut.Arguments.Contains($guide) -or !(Test-Path $shortcut.TargetPath)) { throw 'Broken Edge setup shortcut' }
+            if (!(Test-Path -LiteralPath $shortcut.TargetPath)) { throw "Missing shortcut target $($shortcut.TargetPath)" }
+            if ($shortcut.Arguments -notmatch '-File\s+"([^"]+)"') { throw "Missing guide argument in $($shortcut.Arguments)" }
+            if ((Get-Item -LiteralPath $Matches[1]).FullName -ne (Get-Item -LiteralPath $guide).FullName) { throw "Incorrect guide path in $($shortcut.Arguments)" }
             $ext = Get-Content "$app/browser/extension/manifest.json" -Raw | ConvertFrom-Json
             if ($ext.version -ne $env:RELEASE_TAG.Substring(1)) { throw 'Extension release version mismatch' }
           }
