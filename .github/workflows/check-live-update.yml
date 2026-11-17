@@ -63,10 +63,10 @@ jobs:
           }
           '@
           $condition = New-Object System.Windows.Automation.PropertyCondition(
-            [System.Windows.Automation.AutomationElement]::NameProperty, '下载并安装')
+            [System.Windows.Automation.AutomationElement]::NameProperty, (-join [char[]](0x4e0b,0x8f7d,0x5e76,0x5b89,0x88c5)))
           $deadline = [datetime]::UtcNow.AddSeconds(90)
           do {
-            $dialog = [EegoWindows]::Find($old.Id, '发现新版本')
+            $dialog = [EegoWindows]::Find($old.Id, (-join [char[]](0x53d1,0x73b0,0x65b0,0x7248,0x672c)))
             if ($dialog -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 500 }
           } until ($dialog -ne [IntPtr]::Zero -or [datetime]::UtcNow -gt $deadline)
           if ($dialog -eq [IntPtr]::Zero) {
