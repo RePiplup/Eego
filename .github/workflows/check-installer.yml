@@ -98,6 +98,15 @@ jobs:
             if ($LASTEXITCODE) { throw 'Browser setup failed' }
           }
           Install-Eego $installer
+          if ([version]$env:RELEASE_TAG.Substring(1) -ge [version]'0.10.6') {
+            $guide = Join-Path $app 'browser\Enable-EdgeAssistant.ps1'
+            $shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Eego\启用 Edge 下载助手.lnk'
+            if (!(Test-Path $guide) -or !(Test-Path $shortcutPath)) { throw 'Missing Edge setup guide' }
+            $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
+            if (!$shortcut.Arguments.Contains($guide) -or !(Test-Path $shortcut.TargetPath)) { throw 'Broken Edge setup shortcut' }
+            $ext = Get-Content "$app/browser/extension/manifest.json" -Raw | ConvertFrom-Json
+            if ($ext.version -ne $env:RELEASE_TAG.Substring(1)) { throw 'Extension release version mismatch' }
+          }
           if ((Get-FileHash "$library/tasks.record").Hash -ne $record.Hash) { throw 'Task record changed during install' }
           if ((Get-Content "$downloads/upgrade-fixture.bin") -ne 'preserve this file') { throw 'Download changed' }
           $listed = @('{"op":"list","requestId":"check"}', $stop) | & $service --data-dir $library

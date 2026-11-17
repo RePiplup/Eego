@@ -25,12 +25,12 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def install_browser_files(stage):
+def install_browser_files(stage, version):
     extension = stage / "browser/extension"
     shutil.copytree(SOURCE / "browser/extension", extension, dirs_exist_ok=True)
     manifest = extension / "manifest.json"
     config = json.loads(manifest.read_text(encoding="utf8"))
-    config.update(name="Eego 下载助手", description="将浏览器中的文件下载交给 Eego。")
+    config.update(version=version, name="Eego 下载助手", description="将浏览器中的文件下载交给 Eego。")
     config.pop("optional_permissions", None)
     config.pop("optional_host_permissions", None)
     manifest.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf8")
@@ -65,7 +65,8 @@ def package(build, qt, mingw, output):
                         "--compiler-runtime", "--skip-plugin-types", "qmltooling", "--no-opengl-sw",
                         "--no-system-d3d-compiler", "--no-translations", stage/"HandmadeBTQuick.exe"],
                        env=env, cwd=qt/"bin", check=True)
-        install_browser_files(stage)
+        version = (build / "ui/release-version.txt").read_text().strip()
+        install_browser_files(stage, version)
         origin = (SOURCE / "browser/extension-id.txt").read_text().strip()
         host = dict(name="org.handmadebt.bridge", description="Eego task handoff", type="stdio",
                     path=r"..\eego_browser_host.exe", allowed_origins=[f"chrome-extension://{origin}/"])
@@ -97,7 +98,6 @@ def package(build, qt, mingw, output):
         files = sorted(p for p in stage.rglob("*") if p.is_file())
         hashes = {p.relative_to(stage).as_posix(): digest(p) for p in files}
         manifest = stage/"manifest.json"
-        version = (build / "ui/release-version.txt").read_text().strip()
         manifest.write_text(json.dumps(dict(version=version, entry="HandmadeBTQuick.exe", files=hashes), indent=2), encoding="utf8")
         draft = Path(temp)/"package.zip"
         with zipfile.ZipFile(draft, "x", zipfile.ZIP_DEFLATED, compresslevel=1) as bundle:
