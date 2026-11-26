@@ -15,6 +15,7 @@ target_include_directories(aria_http PUBLIC src/aria2)
 option(HBT_EEGO_CORE "Build the Eego version of the download service" OFF)
 set(core_dir "${CMAKE_CURRENT_SOURCE_DIR}/src")
 if(HBT_EEGO_CORE)
+  configure_file(apps/Eego/core/secure-dns-hosts.txt secure-dns-hosts.txt COPYONLY)
   # Quoted includes must resolve to the same version in every translation unit.
   set(core_dir "${CMAKE_CURRENT_BINARY_DIR}/eego-src")
   file(GLOB shared_sources CONFIGURE_DEPENDS "src/*.cpp" "src/*.hpp")

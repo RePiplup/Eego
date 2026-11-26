@@ -49,7 +49,7 @@ def package(build, qt, mingw, output):
         core.mkdir(parents=True)
         shutil.copy2(build / "ui/HandmadeBTQuick.exe", stage)
         shutil.copy2(SOURCE / "apps/Eego/ui-text.json", stage)
-        for file in ("task_service_host_r3.exe", "core_cli.exe"):
+        for file in ("task_service_host_r3.exe", "core_cli.exe", "secure-dns-hosts.txt"):
             shutil.copy2(build / "core" / file, core)
         shutil.copy2(build / "core/eego_browser_host.exe", stage)
         for file in ("libc++.dll", "libunwind.dll"):

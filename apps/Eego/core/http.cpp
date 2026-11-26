@@ -11,6 +11,9 @@
 #include <iomanip>
 #include <iostream>
 #include <libtorrent/hasher.hpp>
+#include <libtorrent/aux_/ip_helpers.hpp>
+#include <boost/property_tree/json_parser.hpp>
+#include <optional>
 #include <sstream>
 #include <windows.h>
 #include <winhttp.h>
@@ -42,12 +45,51 @@ void check(BOOL b) {
   if (!b)
     throw std::runtime_error("WinHTTP error " + std::to_string(GetLastError()));
 }
+struct ConnectionError : std::runtime_error {
+  explicit ConnectionError(DWORD error) : std::runtime_error("WinHTTP error " + std::to_string(error)) {}
+};
+
+// Only explicitly listed HTTPS hosts may be sent to the public DNS resolver.
+std::string secure_dns_host(std::string const &url) {
+  auto original = wide(url);
+  auto c = checked_http_url(original, false);
+  if (c.nScheme != INTERNET_SCHEME_HTTPS) return {};
+  std::wstring name(c.lpszHostName, c.dwHostNameLength);
+  std::transform(name.begin(), name.end(), name.begin(), ::towlower);
+  if (name.find_first_not_of(L"abcdefghijklmnopqrstuvwxyz0123456789.-") != name.npos) return {};
+  wchar_t module[32768];
+  DWORD count = GetModuleFileNameW(nullptr, module, 32768);
+  if (!count || count == 32768) return {};
+  std::ifstream list(std::filesystem::path(module).parent_path() / "secure-dns-hosts.txt");
+  std::string host(name.begin(), name.end()), line;
+  while (std::getline(list, line)) if (line == host) return host;
+  return {};
+}
+
+std::vector<std::wstring> secure_dns_addresses(std::string const &host) {
+  std::istringstream input(resolve_bootstrap_json(host, false));
+  boost::property_tree::ptree reply;
+  boost::property_tree::read_json(input, reply);
+  std::vector<std::wstring> addresses;
+  if (reply.get<int>("Status") != 0) return addresses;
+  for (auto const &answer : reply.get_child("Answer")) {
+    if (answer.second.get<int>("type") != 1) continue;
+    lt::error_code ec;
+    auto ip = lt::make_address(answer.second.get<std::string>("data"), ec);
+    if (!ec && ip.is_v4() && lt::aux::is_global(ip))
+      addresses.push_back(wide(ip.to_string()));
+    if (addresses.size() == 4) break;
+  }
+  return addresses;
+}
+
 struct Response {
   Internet session, connection, request;
   std::unique_ptr<aria2::HttpHeader> header;
   bool unknown_length = false;
   Response(std::string const &url, std::string const &range,
-           std::string const &etag, BrowserSession const* auth = nullptr, bool discovery = false) {
+           std::string const &etag, BrowserSession const* auth = nullptr, bool discovery = false,
+           std::wstring const &address = {}) {
     auto u = wide(url);
     std::set<std::wstring> visited;
     bool secure_previous = false;
@@ -75,6 +117,9 @@ struct Response {
         WINHTTP_DEFAULT_ACCEPT_TYPES,
         c.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0);
     check(request.h != nullptr);
+    if (!hop && !address.empty())
+      check(WinHttpSetOption(request.h, WINHTTP_OPTION_RESOLUTION_HOSTNAME,
+                             const_cast<wchar_t*>(address.c_str()), DWORD((address.size()+1)*sizeof(wchar_t))));
     // Default Windows certificate/hostname validation is deliberately retained.
     DWORD disable = WINHTTP_DISABLE_REDIRECTS | WINHTTP_DISABLE_COOKIES;
     check(WinHttpSetOption(request.h, WINHTTP_OPTION_DISABLE_FEATURE, &disable,
@@ -99,9 +144,14 @@ struct Response {
       if(!auth->user_agent.empty())hs+="User-Agent: "+auth->user_agent+"\r\n";
     }
     auto wh = wide(hs);
-    check(WinHttpSendRequest(request.h, wh.c_str(), DWORD(wh.size()), nullptr,
-                             0, 0, 0));
-    check(WinHttpReceiveResponse(request.h, nullptr));
+    if (!WinHttpSendRequest(request.h, wh.c_str(), DWORD(wh.size()), nullptr, 0, 0, 0) ||
+        !WinHttpReceiveResponse(request.h, nullptr)) {
+      DWORD error = GetLastError();
+      if (!hop && (error == ERROR_WINHTTP_CANNOT_CONNECT || error == ERROR_WINHTTP_CONNECTION_ERROR ||
+                   error == ERROR_WINHTTP_NAME_NOT_RESOLVED || error == ERROR_WINHTTP_TIMEOUT))
+        throw ConnectionError(error);
+      throw std::runtime_error("WinHTTP error " + std::to_string(error));
+    }
     DWORD size = 0;
     WinHttpQueryHeaders(request.h, WINHTTP_QUERY_RAW_HEADERS_CRLF,
                         WINHTTP_HEADER_NAME_BY_INDEX, nullptr, &size,
@@ -229,7 +279,37 @@ int http_download(std::string const &url, std::string const &path, int segments,
   TaskLock task_lock(lock_path,true);
   task_lock.remove_on_release();
   auto identity = std::filesystem::absolute(out).lexically_normal().u8string();
-  Response probe(url, "0-0", "", control?&control->browser_session:nullptr);
+  auto auth = control ? &control->browser_session : nullptr;
+  // A fresh compatibility retry uses one complete representation. Some CDNs
+  // compute a different ETag for every byte range, making If-Range unusable.
+  bool resume = std::filesystem::exists(checkpoint);
+  bool whole_file_retry = false;
+  if (resume) {
+    auto record = load_record(checkpoint);
+    whole_file_retry = record.rfind("HTTPWHOLE2\n", 0) == 0 || record.rfind("HTTPSTREAM1 ", 0) == 0;
+  }
+  std::wstring address;
+  std::optional<Response> initial;
+  try {
+    initial.emplace(url, whole_file_retry ? "" : "0-0", "", auth);
+  } catch (ConnectionError const &) {
+    auto host = secure_dns_host(url);
+    if (host.empty()) throw;
+    for (auto const &candidate : secure_dns_addresses(host)) {
+      try {
+        whole_file_retry = whole_file_retry || (!resume && !stop_after);
+        initial.emplace(url, whole_file_retry ? "" : "0-0", "", auth, false, candidate);
+        address = candidate;
+        break;
+      } catch (ConnectionError const &) {
+        continue;
+      }
+    }
+    if (!initial) throw;
+  }
+  Response &probe = *initial;
+  if (whole_file_retry && probe.header->getStatusCode() != 200)
+    throw std::runtime_error("expected complete response to full-file GET");
   bool ranged = probe.header->getStatusCode() == 206;
   auto range = probe.header->getRange();
   bool streaming = probe.unknown_length;
@@ -249,7 +329,7 @@ int http_download(std::string const &url, std::string const &path, int segments,
   if (ranged)
     validate(probe, 0, 0, size, etag);
   if (!ranged && !streaming && !control &&
-      (segments > 1 || stop_after || std::filesystem::exists(checkpoint)))
+      ((segments > 1 && !whole_file_retry) || stop_after || std::filesystem::exists(checkpoint)))
     throw std::runtime_error(
         "server does not support Range; use segments=1 without resume");
   if (ranged && etag.empty())
@@ -257,7 +337,6 @@ int http_download(std::string const &url, std::string const &path, int segments,
                              "download in this probe");
   std::vector<int> done(size_t((size + chunk - 1) / chunk), 0);
   std::vector<std::string> hashes(done.size(), "-");
-  bool resume = std::filesystem::exists(checkpoint);
   if (resume && !streaming) {
     std::istringstream f(load_record(checkpoint));
     std::string magic, u, e, target;
@@ -265,7 +344,7 @@ int http_download(std::string const &url, std::string const &path, int segments,
     if (!(f >> magic >> std::quoted(u) >> std::quoted(e) >>
           std::quoted(target) >> n >> c))
       throw std::runtime_error("truncated HTTP checkpoint");
-    if (magic != "HTTP2" || u != url || e != etag || target != identity ||
+    if (magic != (whole_file_retry ? "HTTPWHOLE2" : "HTTP2") || u != url || e != etag || target != identity ||
         n != size || c != chunk)
       throw std::runtime_error("checkpoint identity mismatch");
     for (auto &hash : hashes) {
@@ -307,7 +386,7 @@ int http_download(std::string const &url, std::string const &path, int segments,
   }
   auto serialize = [&] {
     std::ostringstream f;
-    f << "HTTP2\n"
+    f << (whole_file_retry ? "HTTPWHOLE2\n" : "HTTP2\n")
       << std::quoted(url) << '\n'
       << std::quoted(etag) << '\n'
       << std::quoted(identity) << '\n'
@@ -441,7 +520,7 @@ int http_download(std::string const &url, std::string const &path, int segments,
               break;
             uint64_t start = k * chunk, end = std::min(size, start + chunk) - 1;
             Response r(url, std::to_string(start) + "-" + std::to_string(end),
-                       etag, control?&control->browser_session:nullptr);
+                       etag, auth, false, address);
             validate(r, start, end, size, etag);
             auto hash = write_body(r, start, end - start + 1);
             {
